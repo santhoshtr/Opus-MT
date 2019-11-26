@@ -1,4 +1,5 @@
 function postData() {
+    document.getElementById('progress').style.display = "block";
     fetch('/api', {
         method: 'POST', // *GET, POST, PUT, DELETE, etc.
         headers: {
@@ -12,5 +13,6 @@ function postData() {
     }).then(response => response.json())
         .then(result => {
             document.getElementById('target_content').value = result.translation
+            document.getElementById('progress').style.display = "none";
         })
 }

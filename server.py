@@ -7,15 +7,21 @@ import json
 import argparse
 import websocket
 from tornado import web, ioloop, queues, gen, process
-
+from content_processor import ContentProcessor
 
 class TranslatorWorker():
 
-    def __init__(self, service):
+    def __init__(self, srclang,targetlang,service):
         self.q = queues.Queue()
         # Service definition
         self.service = service
         self.p = None
+        self.contentprocessor=ContentProcessor(
+            srclang,
+            targetlang,
+            bpe=self.service.get('bpe'),
+            spm=self.service.get('spm')
+        )
         self.ws_url = "ws://{}:{}/translate".format(
             self.service['host'], self.service['port'])
         if self.service['configuration']:
@@ -34,12 +40,16 @@ class TranslatorWorker():
     def on_exit(self):
         print("Process exited")
 
-    def translate(self, source):
+    def translate(self, srctxt):
         ws = websocket.create_connection(self.ws_url)
-        ws.send(source)
-        translation = ws.recv()
+        sentences= self.contentprocessor.preprocess(srctxt)
+        translatedSentences=[]
+        for sentence in sentences:
+            ws.send(sentence)
+            translatedSentences.append( ws.recv() )
         ws.close()
-        return translation
+        translation=self.contentprocessor.postprocess(translatedSentences)
+        return ' '.join(translation)
 
 
 class ApiHandler(web.RequestHandler):
@@ -89,7 +99,7 @@ def initialize_workers(config):
         for target_lang in targetLangs:
             lang_pair = "{}-{}".format(source_lang, target_lang)
             decoder_config = targetLangs[target_lang]
-            worker_pool[lang_pair] = TranslatorWorker(decoder_config)
+            worker_pool[lang_pair] = TranslatorWorker(source_lang, target_lang,decoder_config)
 
     return worker_pool
 
